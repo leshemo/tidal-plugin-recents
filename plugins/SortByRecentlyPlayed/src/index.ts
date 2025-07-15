@@ -27,71 +27,84 @@ let consecutiveCount = 0;
 
 // Guard to prevent double sorting
 let isCurrentlySorting = false;
+let isLoadingAllAlbums = false;
 
 // Cache for album names to improve logging readability
 const albumNameCache = new Map<string, string>();
 
-// // Function to get album name for logging
-// async function getAlbumName(albumId: string): Promise<string> {
-// 	if (albumNameCache.has(albumId)) {
-// 		return albumNameCache.get(albumId)!;
-// 	}
+// Function to get album name for logging
+async function getAlbumName(albumId: string): Promise<string> {
+	if (albumNameCache.has(albumId)) {
+		return albumNameCache.get(albumId)!;
+	}
 	
-// 	try {
-// 		// Try to get album name from the current state
-// 		const state = redux.store.getState();
-// 		const albums = state.favorites?.albums || [];
+	try {
+		// Try to get album name from the current state
+		const state = redux.store.getState();
+		const albums = state.favorites?.albums || [];
 		
-// 		// Look for the album in the current favorites
-// 		for (const album of albums) {
-// 			if (album.id?.toString() === albumId) {
-// 				const name = album.title || `Album ${albumId}`;
-// 				albumNameCache.set(albumId, name);
-// 				return name;
-// 			}
-// 		}
+		// Look for the album in the current favorites
+		for (const album of albums) {
+			if (album.id?.toString() === albumId) {
+				const name = album.title || `Album ${albumId}`;
+				albumNameCache.set(albumId, name);
+				return name;
+			}
+		}
 		
-// 		// If not found, use a generic name
-// 		const name = `Album ${albumId}`;
-// 		albumNameCache.set(albumId, name);
-// 		return name;
-// 	} catch (error) {
-// 		return `Album ${albumId}`;
-// 	}
-// }
+		// If not found, use a generic name
+		const name = `Album ${albumId}`;
+		albumNameCache.set(albumId, name);
+		return name;
+	} catch (error) {
+		return `Album ${albumId}`;
+	}
+}
 
-// // Function to reload the current page to reflect sorting changes
-// function reloadCurrentPage() {
-// 	try {
-// 		// Check if we're currently on the favorites albums page
-// 		const state = redux.store.getState();
-// 		const currentPath = state.router?.pathname;
+// Function to reload the current page to reflect sorting changes
+function reloadCurrentPage() {
+	try {
+		// Check if we're currently on the favorites albums page
+		const state = redux.store.getState();
+		const router = state.router;
 		
-// 		if (currentPath === '/my-collection/albums') {
-// 			trace.msg.log("Reloading favorites albums page to reflect sorting changes...");
+		// Debug: log the entire router state to see what's available
+		trace.msg.log(`Router state: ${JSON.stringify(router)}`);
+		
+		// Try multiple ways to get the current path
+		const currentPath = router?.currentPath;
+				
+		// Check for various possible album page paths
+		const isOnAlbumsPage = currentPath && (
+			currentPath === '/my-collection/albums'
+		);
+		
+		if (isOnAlbumsPage) {
+			trace.msg.log(`Reloading albums page (${currentPath}) to reflect sorting changes...`);
 			
-// 			// Dispatch a navigation action to reload the page
-// 			redux.actions["router/NAVIGATED"]({
-// 				params: {},
-// 				path: '/my-collection/albums',
-// 				search: ''
-// 			});
+			// Force a complete page refresh by dispatching multiple actions
+			redux.actions["content/LOAD_FAVORITE_ALBUMS"]({
+				albums: [],
+				isModified: true
+			});
 			
-// 			// Also trigger a fresh load of the albums
-// 			setTimeout(() => {
-// 				redux.actions["content/LOAD_LIST_ITEMS_PAGE"]({
-// 					listName: 'favoriteAlbums',
-// 					listType: 'album',
-// 					order: 'DATE',
-// 					orderDirection: 'DESC',
-// 					reset: true
-// 				});
-// 			}, 100);
-// 		}
-// 	} catch (error) {
-// 		trace.err(`Failed to reload page: ${error}`);
-// 	}
-// }
+			// Trigger a fresh load with reset
+			setTimeout(() => {
+				redux.actions["content/LOAD_LIST_ITEMS_PAGE"]({
+					listName: 'favoriteAlbums',
+					listType: 'album',
+					order: 'DATE',
+					orderDirection: 'DESC',
+					reset: true
+				});
+			}, 50);
+		} else {
+			trace.msg.log(`Not on albums page (${currentPath}), skipping reload`);
+		}
+	} catch (error) {
+		trace.err(`Failed to reload page: ${error}`);
+	}
+}
 
 // Listen for song changes to track recently played albums
 MediaItem.onMediaTransition(unloads, async (mediaItem: any) => {
@@ -123,13 +136,13 @@ MediaItem.onMediaTransition(unloads, async (mediaItem: any) => {
 		persistentStore[RECENTLY_PLAYED_KEY] = recentlyPlayedOrder;
 		
 		// Get album name for better logging
-		// const albumName = await getAlbumName(albumId);
-		// trace.msg.log(`Updated recently played order: ${albumName} (${albumId})`);
+		const albumName = await getAlbumName(albumId);
+		trace.msg.log(`Updated recently played order: ${albumName} (${albumId})`);
 		
 		// Only reload if the album wasn't already at the top and sorting is enabled
-		// if (!wasAlreadyAtTop && shouldSortByRecentlyPlayed()) {
-		// 	reloadCurrentPage();
-		// }
+		if (!wasAlreadyAtTop && shouldSortByRecentlyPlayed()) {
+			reloadCurrentPage();
+		}
 	}
 });
 
@@ -157,6 +170,11 @@ function sortAlbumsByRecentlyPlayed(albums: any[]): any[] {
 // Function to force load all favorite albums
 async function loadAllFavoriteAlbums(): Promise<any[]> {
 	try {
+		if (isLoadingAllAlbums) {
+			return []; // Prevent multiple simultaneous loads
+		}
+		
+		isLoadingAllAlbums = true;
 		trace.msg.log("Loading all favorite albums for complete sorting...");
 		
 		// Get the current state to see how many albums we have
@@ -188,6 +206,8 @@ async function loadAllFavoriteAlbums(): Promise<any[]> {
 	} catch (error) {
 		trace.err(`Failed to load all favorite albums: ${error}`);
 		return [];
+	} finally {
+		isLoadingAllAlbums = false;
 	}
 }
 
@@ -220,7 +240,7 @@ redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (actio
 		const isFirstPage = action.offset === 0;
 		const hasMoreAlbums = action.totalNumberOfItems > items.length;
 		
-		if (isFirstPage && hasMoreAlbums) {
+		if (isFirstPage && hasMoreAlbums && !isLoadingAllAlbums) {
 			// Load all albums to ensure complete sorting
 			loadAllFavoriteAlbums();
 		}
@@ -249,4 +269,4 @@ redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (actio
 });
 
 // Log when plugin loads
-trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.20`);
+trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.24`);
