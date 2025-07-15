@@ -1,0 +1,10 @@
+{
+	"name": "SortByRecentlyPlayed",
+	"description": "Plugin for Tidal Album Library to sort by recently played",
+	"author": {
+		"name": "leshemo",
+		"url": "https://github.com/leshemo"
+	},
+	"main": "./src/index.ts",
+	"type": "module"
+}
