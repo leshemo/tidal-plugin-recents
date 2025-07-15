@@ -5,8 +5,6 @@ import { settingsStore } from "./Settings";
 export const { trace, errSignal } = Tracer("[SortByRecentlyPlayed]");
 errSignal!._ = "SortByRecentlyPlayed plugin error signal";
 
-trace.msg.log(`Hello ${redux.store.getState().user.meta.profileName} from the SortByRecentlyPlayed plugin!`);
-
 // Plugin settings
 export { Settings } from "./Settings";
 
@@ -25,64 +23,19 @@ let recentlyPlayedOrder: string[] = (persistentStore[RECENTLY_PLAYED_KEY] as str
 let lastAlbumId: string | null = null;
 let consecutiveCount = 0;
 
-// Guard to prevent double sorting
+// Guards to prevent conflicts
 let isCurrentlySorting = false;
 let isLoadingAllAlbums = false;
-
-// Cache for album names to improve logging readability
-const albumNameCache = new Map<string, string>();
-
-// Function to get album name for logging
-async function getAlbumName(albumId: string): Promise<string> {
-	if (albumNameCache.has(albumId)) {
-		return albumNameCache.get(albumId)!;
-	}
-	
-	try {
-		// Try to get album name from the current state
-		const state = redux.store.getState();
-		const albums = state.favorites?.albums || [];
-		
-		// Look for the album in the current favorites
-		for (const album of albums) {
-			if (album.id?.toString() === albumId) {
-				const name = album.title || `Album ${albumId}`;
-				albumNameCache.set(albumId, name);
-				return name;
-			}
-		}
-		
-		// If not found, use a generic name
-		const name = `Album ${albumId}`;
-		albumNameCache.set(albumId, name);
-		return name;
-	} catch (error) {
-		return `Album ${albumId}`;
-	}
-}
 
 // Function to reload the current page to reflect sorting changes
 function reloadCurrentPage() {
 	try {
-		// Check if we're currently on the favorites albums page
 		const state = redux.store.getState();
-		const router = state.router;
+		const currentPath = state.router?.currentPath;
 		
-		// Debug: log the entire router state to see what's available
-		trace.msg.log(`Router state: ${JSON.stringify(router)}`);
-		
-		// Try multiple ways to get the current path
-		const currentPath = router?.currentPath;
-				
-		// Check for various possible album page paths
-		const isOnAlbumsPage = currentPath && (
-			currentPath === '/my-collection/albums'
-		);
-		
-		if (isOnAlbumsPage) {
-			trace.msg.log(`Reloading albums page (${currentPath}) to reflect sorting changes...`);
+		if (currentPath === '/my-collection/albums') {
 			
-			// Force a complete page refresh by dispatching multiple actions
+			// Force a complete page refresh
 			redux.actions["content/LOAD_FAVORITE_ALBUMS"]({
 				albums: [],
 				isModified: true
@@ -98,8 +51,6 @@ function reloadCurrentPage() {
 					reset: true
 				});
 			}, 50);
-		} else {
-			trace.msg.log(`Not on albums page (${currentPath}), skipping reload`);
 		}
 	} catch (error) {
 		trace.err(`Failed to reload page: ${error}`);
@@ -134,10 +85,6 @@ MediaItem.onMediaTransition(unloads, async (mediaItem: any) => {
 		
 		// Save to persistent storage
 		persistentStore[RECENTLY_PLAYED_KEY] = recentlyPlayedOrder;
-		
-		// Get album name for better logging
-		const albumName = await getAlbumName(albumId);
-		trace.msg.log(`Updated recently played order: ${albumName} (${albumId})`);
 		
 		// Only reload if the album wasn't already at the top and sorting is enabled
 		if (!wasAlreadyAtTop && shouldSortByRecentlyPlayed()) {
@@ -175,24 +122,20 @@ async function loadAllFavoriteAlbums(): Promise<any[]> {
 		}
 		
 		isLoadingAllAlbums = true;
-		trace.msg.log("Loading all favorite albums for complete sorting...");
 		
 		// Get the current state to see how many albums we have
 		const state = redux.store.getState();
 		const totalAlbums = state.favorites?.albums?.length || 0;
 		
 		if (totalAlbums === 0) {
-			trace.msg.log("No favorite albums found in store");
 			return [];
 		}
 		
-		trace.msg.log(`Found ${totalAlbums} total favorite albums`);
 		
 		// Get all album IDs from the store
 		const allAlbumIds = state.favorites?.albums || [];
 		
 		// Load all albums by dispatching a request for all of them
-		// This will trigger the Redux interceptor for each page
 		redux.actions["content/LOAD_LIST_ITEMS_PAGE"]({
 			listName: 'favoriteAlbums',
 			listType: 'album',
@@ -211,7 +154,7 @@ async function loadAllFavoriteAlbums(): Promise<any[]> {
 	}
 }
 
-// Simple Redux interceptor that only handles the specific action we need
+// Redux interceptor that handles album list loading and sorting
 redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (action: any) => {
 	// Only process favorite albums
 	if (action?.listName !== 'favoriteAlbums') {
@@ -258,9 +201,7 @@ redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (actio
 			.slice(0, 3)
 			.map((album: any) => album.title || `Album ${album.id}`)
 			.join(', ');
-		
-		trace.msg.log(`Sorted ${sortedItems.length} albums by recently played order. Recently played in this page: ${recentlyPlayedInPage || 'none'}`);
-		
+				
 	} catch (error) {
 		trace.err(`Failed to sort albums: ${error}`);
 	} finally {
@@ -269,4 +210,4 @@ redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (actio
 });
 
 // Log when plugin loads
-trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.24`);
+trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.26`);
