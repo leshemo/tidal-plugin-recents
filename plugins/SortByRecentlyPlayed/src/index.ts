@@ -13,7 +13,6 @@ export const unloads = new Set<LunaUnload>();
 
 // Constants
 const RECENTLY_PLAYED_KEY = "recentlyPlayedOrder";
-const MAX_HISTORY = 300;
 
 // Persistent storage for recently played album order
 const persistentStore = await ReactiveStore.getPluginStorage("SortByRecentlyPlayed", { [RECENTLY_PLAYED_KEY]: [] }) as Record<string, any>;
@@ -70,18 +69,20 @@ MediaItem.onMediaTransition(unloads, async (mediaItem: any) => {
 		lastAlbumId = albumId;
 	}
 	
-	// Only update order if at least two songs from the same album are played consecutively
-	if (consecutiveCount === 2) {
+	// Get the configurable track threshold from settings
+	const trackThreshold = settingsStore.trackThreshold || 4;
+	
+	// Only update order if enough consecutive tracks from the same album are played
+	if (consecutiveCount === trackThreshold) {
 		// Check if this album is already at the top
 		const wasAlreadyAtTop = recentlyPlayedOrder[0] === albumId;
 		
 		// Move albumId to top of recently played list
 		recentlyPlayedOrder = [albumId, ...recentlyPlayedOrder.filter(id => id !== albumId)];
 		
-		// Limit history unless toggle is enabled
-		if (!settingsStore.storeAllHistory) {
-			recentlyPlayedOrder = recentlyPlayedOrder.slice(0, MAX_HISTORY);
-		}
+		// Apply storage limit
+		const maxHistory = settingsStore.maxHistory || 300;
+		recentlyPlayedOrder = recentlyPlayedOrder.slice(0, maxHistory);
 		
 		// Save to persistent storage
 		persistentStore[RECENTLY_PLAYED_KEY] = recentlyPlayedOrder;
@@ -93,9 +94,10 @@ MediaItem.onMediaTransition(unloads, async (mediaItem: any) => {
 	}
 });
 
-// Simple function to check if sorting should be enabled
+// Function to check if sorting should be enabled
 function shouldSortByRecentlyPlayed() {
-	return settingsStore.sortByRecentlyPlayed === true;
+	// Only sort if trackWithoutSort is false (i.e., sorting is enabled)
+	return settingsStore.trackWithoutSort !== true;
 }
 
 // Simple sorting function that uses the persistent order
@@ -210,4 +212,4 @@ redux.intercept("content/LOAD_LIST_ITEMS_PAGE_SUCCESS_MODIFIED", unloads, (actio
 });
 
 // Log when plugin loads
-trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.26`);
+trace.msg.log(`SortByRecentlyPlayed plugin loaded successfully. v0.1.28`);

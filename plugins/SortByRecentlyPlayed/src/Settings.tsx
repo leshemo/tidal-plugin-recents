@@ -1,34 +1,51 @@
 import React from "react";
-
 import { LunaSettings, LunaSwitchSetting, LunaNumberSetting } from "@luna/ui";
-import { trace } from ".";
 import { ReactiveStore } from "@luna/core";
 
-const storageKey = "storeAllHistory";
-const sortByRecentsKey = "sortByRecentlyPlayed";
+// Settings keys
+const trackThresholdKey = "trackThreshold";
+const maxHistoryKey = "maxHistory";
+const trackWithoutSortKey = "trackWithoutSort";
 
-export const settingsStore = await ReactiveStore.getPluginStorage("SortByRecentlyPlayed", { [storageKey]: false, [sortByRecentsKey]: false });
+export const settingsStore = await ReactiveStore.getPluginStorage("SortByRecentlyPlayed", { 
+	[trackThresholdKey]: 4,
+	[maxHistoryKey]: 300,
+	[trackWithoutSortKey]: false
+});
 
 export const Settings = () => {
-	const [storeAll, setStoreAll] = React.useState(settingsStore[storageKey]);
-	const [sortByRecents, setSortByRecents] = React.useState(settingsStore[sortByRecentsKey]);
+	const [trackThreshold, setTrackThreshold] = React.useState(settingsStore[trackThresholdKey]);
+	const [maxHistory, setMaxHistory] = React.useState(settingsStore[maxHistoryKey]);
+	const [trackWithoutSort, setTrackWithoutSort] = React.useState(settingsStore[trackWithoutSortKey]);
 
 	return (
 		<LunaSettings>
-			<LunaSwitchSetting
-				title="Sort by Recently Played"
-				desc="Enable to sort your favorite albums by how recently you played them. This will persist across sessions."
-				checked={sortByRecents}
-				onChange={(_: React.ChangeEvent<HTMLInputElement>, checked?: boolean) => {
-					setSortByRecents(settingsStore[sortByRecentsKey] = !!checked);
+			<LunaNumberSetting
+				title="Tracks to Consider Album 'Listened'"
+				desc="Number of consecutive tracks from the same album that need to be played before the album is considered 'listened' and moved to the top of your recently played list."
+				value={trackThreshold}
+				// onNumber={(num) => setChangeBy((storage.changeBy = num))}
+				onNumber={(value: number) => {
+					setTrackThreshold(settingsStore[trackThresholdKey] = value);
 				}}
+				min={1}
+				max={20}
+			/>
+			<LunaNumberSetting
+				title="Maximum Albums to Remember"
+				desc="Maximum number of albums to keep in your recently played history."
+				value={maxHistory}
+				onNumber={(value: number) => {
+					setMaxHistory(settingsStore[maxHistoryKey] = value);
+				}}
+				min={50}
+				max={1000}
 			/>
 			<LunaSwitchSetting
-				title="Store all recently played albums"
-				desc="If enabled, the plugin will remember all albums you've ever played, not just the most recent 300."
-				checked={storeAll}
+				title="Keep tracking order but don't sort"
+				desc="Track recently played albums but don't automatically sort the albums page. If disabled, albums will be sorted by recently played order."
 				onChange={(_: React.ChangeEvent<HTMLInputElement>, checked?: boolean) => {
-					setStoreAll(settingsStore[storageKey] = !!checked);
+					setTrackWithoutSort(settingsStore[trackWithoutSortKey] = !!checked);
 				}}
 			/>
 		</LunaSettings>
